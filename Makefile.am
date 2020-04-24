@@ -42,6 +42,7 @@ memtier_benchmark_SOURCES = \
 	file_io.cpp file_io.h \
 	config_types.cpp config_types.h
 memtier_benchmark_LDADD = \
+	-lkernkv \
 	$(LIBEVENT_LIBS) \
 	$(LIBEVENT_OPENSSL_LIBS) \
 	$(LIBCRYPTO_LIBS) \

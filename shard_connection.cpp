@@ -56,6 +56,8 @@
 #include "event2/bufferevent_ssl.h"
 #endif
 
+#include <iostream>
+
 void cluster_client_read_handler(bufferevent *bev, void *ctx)
 {
     shard_connection *sc = (shard_connection *) ctx;
@@ -67,6 +69,8 @@ void cluster_client_read_handler(bufferevent *bev, void *ctx)
 void cluster_client_event_handler(bufferevent *bev, short events, void *ctx)
 {
     shard_connection *sc = (shard_connection *) ctx;
+
+    std::cout << "Calling shard_connection::handle_event with " << events << " events." << std::endl;
 
     assert(sc != NULL);
     sc->handle_event(events);
@@ -124,13 +128,13 @@ verify_request::~verify_request(void)
 shard_connection::shard_connection(unsigned int id, connections_manager* conns_man, benchmark_config* config,
                                    struct event_base* event_base, abstract_protocol* abs_protocol) :
         m_address(NULL), m_port(NULL), m_unix_sockaddr(NULL),
-        m_bev(NULL), m_pending_resp(0), m_connection_state(conn_disconnected),
+        m_bev(NULL), m_pending_resp(0), m_connection_state(conn_connected),
         m_authentication(auth_done), m_db_selection(select_done), m_cluster_slots(slots_done) {
     m_id = id;
     m_conns_manager = conns_man;
     m_config = config;
     m_event_base = event_base;
-
+/*
     if (m_config->unix_socket) {
         m_unix_sockaddr = (struct sockaddr_un *) malloc(sizeof(struct sockaddr_un));
         assert(m_unix_sockaddr != NULL);
@@ -139,7 +143,7 @@ shard_connection::shard_connection(unsigned int id, connections_manager* conns_m
         strncpy(m_unix_sockaddr->sun_path, m_config->unix_socket, sizeof(m_unix_sockaddr->sun_path)-1);
         m_unix_sockaddr->sun_path[sizeof(m_unix_sockaddr->sun_path)-1] = '\0';
     }
-
+*/
     m_protocol = abs_protocol->clone();
     assert(m_protocol != NULL);
 
@@ -180,6 +184,8 @@ shard_connection::~shard_connection() {
 }
 
 void shard_connection::setup_event(int sockfd) {
+    (void)sockfd;
+    /*
     if (m_bev) {
         bufferevent_free(m_bev);
     }
@@ -206,12 +212,14 @@ void shard_connection::setup_event(int sockfd) {
     bufferevent_setcb(m_bev, cluster_client_read_handler,
         NULL, cluster_client_event_handler, (void *)this);
     m_protocol->set_buffers(bufferevent_get_input(m_bev), bufferevent_get_output(m_bev));
+    */
 }
 
 int shard_connection::setup_socket(struct connect_info* addr) {
+    (void)addr;
+    /*
     int flags;
     int sockfd;
-
     if (m_unix_sockaddr != NULL) {
         sockfd = socket(AF_UNIX, SOCK_STREAM, 0);
         if (sockfd < 0) {
@@ -246,9 +254,13 @@ int shard_connection::setup_socket(struct connect_info* addr) {
     }
 
     return sockfd;
+    */
+    return -1;
 }
 
 int shard_connection::connect(struct connect_info* addr) {
+    (void)addr;
+    /*
     // set required setup commands
     m_authentication = m_config->authenticate ? auth_none : auth_done;
     m_db_selection = m_config->select_db ? select_none : select_done;
@@ -277,7 +289,7 @@ int shard_connection::connect(struct connect_info* addr) {
         benchmark_error_log("connect failed, error = %s\n", strerror(errno));
         return -1;
     }
-
+    */
     return 0;
 }
 
@@ -343,6 +355,8 @@ bool shard_connection::is_conn_setup_done() {
 }
 
 void shard_connection::send_conn_setup_commands(struct timeval timestamp) {
+    (void)timestamp;
+    /*
     if (m_authentication == auth_none) {
         benchmark_debug_log("sending authentication command.\n");
         m_protocol->authenticate(m_config->authenticate);
@@ -366,6 +380,7 @@ void shard_connection::send_conn_setup_commands(struct timeval timestamp) {
         push_req(new request(rt_cluster_slots, 0, &timestamp, 0));
         m_cluster_slots = slots_sent;
     }
+    */
 }
 
 void shard_connection::process_response(void)
@@ -551,6 +566,7 @@ void shard_connection::send_set_command(struct timeval* sent_time, const char *k
                                              expiry, offset);
 
     push_req(new request(rt_set, cmd_size, sent_time, 1));
+    process_response();
 }
 
 void shard_connection::send_get_command(struct timeval* sent_time,
@@ -561,6 +577,7 @@ void shard_connection::send_get_command(struct timeval* sent_time,
     cmd_size = m_protocol->write_command_get(key, key_len, offset);
 
     push_req(new request(rt_get, cmd_size, sent_time, 1));
+    process_response();
 }
 
 void shard_connection::send_mget_command(struct timeval* sent_time, const keylist* key_list) {

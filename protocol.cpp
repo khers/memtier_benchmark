@@ -27,6 +27,10 @@
 #include <assert.h>
 #endif
 
+extern "C" {
+#include <kernkv/kernkv.h>
+}
+
 #include "protocol.h"
 #include "memtier_benchmark.h"
 #include "libmemcached_protocol/binary.h"
@@ -1134,6 +1138,139 @@ int memcache_binary_protocol::write_arbitrary_command(const char *val, int val_l
     assert(0);
 }
 
+class kernkv_protocol : public abstract_protocol {
+protected:
+    enum response_state { rs_initial, rs_read_section, rs_read_value, rs_read_end };
+    response_state m_response_state;
+    unsigned int m_value_len;
+    int m_response_len;
+public:
+    kernkv_protocol();
+    ~kernkv_protocol();
+    virtual kernkv_protocol* clone(void) { return new kernkv_protocol(); }
+    virtual int select_db(int db) {
+        (void)db;
+        return 0;
+    }
+
+    virtual int authenticate(const char *credentials) {
+        (void)credentials;
+        return 0;
+    }
+
+    virtual int write_command_cluster_slots() {
+        assert(0);
+    }
+
+    virtual int write_command_set(const char *key, int key_len, const char *value,
+                                  int value_len, int expiry, unsigned int offset);
+    virtual int write_command_get(const char *key, int key_len, unsigned int offset);
+
+    virtual int write_command_multi_get(const keylist *keylist) {
+        (void)keylist;
+        assert(0);
+    }
+
+    virtual int write_command_wait(unsigned int num_slaves, unsigned int timeout) {
+        (void)num_slaves;
+        (void)timeout;
+        assert(0);
+    }
+
+    virtual int parse_response(void) {
+        int ret = m_response_len;
+        --m_response_len;
+        if (m_response_len < 0)
+            m_response_len = 0;
+        return ret;
+    }
+
+    // handle arbitrary command
+    virtual bool format_arbitrary_command(arbitrary_command& cmd) {
+        (void)cmd;
+        assert(0);
+    }
+
+    virtual int write_arbitrary_command(const command_arg *arg) {
+        (void)arg;
+        assert(0);
+    }
+
+    virtual int write_arbitrary_command(const char *val, int val_len) {
+        (void)val;
+        (void)val_len;
+        assert(0);
+    }
+
+};
+
+
+kernkv_protocol::kernkv_protocol() :
+    m_response_state(rs_initial), m_value_len(0), m_response_len(0) {
+}
+
+kernkv_protocol::~kernkv_protocol() {
+    shutdown_kernkv();
+}
+
+int kernkv_protocol::write_command_set(const char *key, int key_len, const char *value,
+                                       int value_len, int expiry, unsigned int offset) {
+    (void)expiry;
+    (void)offset;
+    (void)key_len;
+    struct value val;
+    u64 kern_key = 0;
+
+    memcpy(val.buf, value, static_cast<size_t>(value_len));
+    val.len = static_cast<u64>(value_len);
+
+    sscanf(key, "memtier-%lu", &kern_key);
+    if (kern_key == 0) {
+        benchmark_error_log("Failed to extract key number\n");
+    }
+
+    int ret = kernkv_put(kern_key, &val);
+    ++m_response_len;
+    if (ret == KV_SUCCESS) {
+        m_last_response.set_error(false);
+        m_last_response.incr_hits();
+    } else {
+        m_last_response.set_error(true);
+        benchmark_error_log("KernKV put call failed\n");
+    }
+
+    return static_cast<int>((2 * sizeof(u64)) + val.len);
+}
+
+int kernkv_protocol::write_command_get(const char *key, int key_len, unsigned int offset) {
+    (void)key_len;
+    (void)offset;
+    u64 kern_key = 0;
+    struct value val;
+
+    sscanf(key, "memtier-%lu", &kern_key);
+    if (kern_key == 0) {
+        benchmark_error_log("Failed to extract key number\n");
+    }
+
+    memset(&val, 0, sizeof(struct value));
+
+    int ret = kernkv_get(kern_key, &val);
+    ++m_response_len;
+    if (ret == KV_VALUE || ret == KV_SUCCESS) {
+        m_last_response.incr_hits();
+        m_last_response.set_error(false);
+    } else if (ret == KV_NOTFOUND) {
+        m_last_response.set_error(false);
+    } else {
+        benchmark_error_log("KernKV GET failed\n");
+        m_last_response.set_error(true);
+    }
+
+    return sizeof(u64);
+}
+
+
 /////////////////////////////////////////////////////////////////////////
 
 class abstract_protocol *protocol_factory(const char *proto_name)
@@ -1146,6 +1283,8 @@ class abstract_protocol *protocol_factory(const char *proto_name)
         return new memcache_text_protocol();
     } else if (strcmp(proto_name, "memcache_binary") == 0) {
         return new memcache_binary_protocol();
+    } else if (strcmp(proto_name, "kernkv") == 0) {
+        return new kernkv_protocol();
     } else {
         benchmark_error_log("Error: unknown protocol '%s'.\n", proto_name);
         return NULL;

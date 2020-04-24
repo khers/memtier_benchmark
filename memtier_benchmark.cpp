@@ -41,6 +41,10 @@
 
 #include <stdexcept>
 
+extern "C" {
+#include <kernkv/kernkv.h>
+}
+
 #include "client.h"
 #include "JSON_handler.h"
 #include "obj_gen.h"
@@ -484,8 +488,9 @@ static int config_parse_args(int argc, char *argv[], struct benchmark_config *cf
                 case 'P':
                     if (strcmp(optarg, "memcache_text") &&
                         strcmp(optarg, "memcache_binary") &&
-                        strcmp(optarg, "redis")) {
-                                fprintf(stderr, "error: supported protocols are 'memcache_text', 'memcache_binary' and 'redis'.\n");
+                        strcmp(optarg, "redis") &&
+                        strcmp(optarg, "kernkv")) {
+                                fprintf(stderr, "error: supported protocols are 'memcache_text', 'memcache_binary', 'redis', and kernkv.\n");
                                 return -1;
                     }
                     cfg->protocol = optarg;
@@ -1462,6 +1467,20 @@ int main(int argc, char *argv[])
         std::vector<run_stats> all_stats;
         all_stats.reserve(cfg.run_count);
 
+        std::string sips[3] = {
+            "192.168.122.254",
+            "192.168.122.95",
+            "192.168.122.124"
+        };
+        char *ips[3];
+        ips[0] = const_cast<char*>(sips[0].c_str());
+        ips[1] = const_cast<char*>(sips[1].c_str());
+        ips[2] = const_cast<char*>(sips[2].c_str());
+
+        if (init_kernkv("192.168.122.1", 3, 3, ips)) {
+            benchmark_error_log("Failed to initialize kernkv\n");
+        }
+
         for (unsigned int run_id = 1; run_id <= cfg.run_count; run_id++) {
             if (run_id > 1)
                 sleep(1);   // let connections settle
@@ -1469,6 +1488,9 @@ int main(int argc, char *argv[])
             run_stats stats = run_benchmark(run_id, &cfg, obj_gen);
             all_stats.push_back(stats);
         }
+
+        shutdown_kernkv();
+
         //
         // Print some run information
         fprintf(outfile,
