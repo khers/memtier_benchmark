@@ -70,8 +70,6 @@ void cluster_client_event_handler(bufferevent *bev, short events, void *ctx)
 {
     shard_connection *sc = (shard_connection *) ctx;
 
-    std::cout << "Calling shard_connection::handle_event with " << events << " events." << std::endl;
-
     assert(sc != NULL);
     sc->handle_event(events);
 }
@@ -134,7 +132,6 @@ shard_connection::shard_connection(unsigned int id, connections_manager* conns_m
     m_conns_manager = conns_man;
     m_config = config;
     m_event_base = event_base;
-/*
     if (m_config->unix_socket) {
         m_unix_sockaddr = (struct sockaddr_un *) malloc(sizeof(struct sockaddr_un));
         assert(m_unix_sockaddr != NULL);
@@ -143,7 +140,6 @@ shard_connection::shard_connection(unsigned int id, connections_manager* conns_m
         strncpy(m_unix_sockaddr->sun_path, m_config->unix_socket, sizeof(m_unix_sockaddr->sun_path)-1);
         m_unix_sockaddr->sun_path[sizeof(m_unix_sockaddr->sun_path)-1] = '\0';
     }
-*/
     m_protocol = abs_protocol->clone();
     assert(m_protocol != NULL);
 
@@ -184,8 +180,6 @@ shard_connection::~shard_connection() {
 }
 
 void shard_connection::setup_event(int sockfd) {
-    (void)sockfd;
-    /*
     if (m_bev) {
         bufferevent_free(m_bev);
     }
@@ -212,12 +206,10 @@ void shard_connection::setup_event(int sockfd) {
     bufferevent_setcb(m_bev, cluster_client_read_handler,
         NULL, cluster_client_event_handler, (void *)this);
     m_protocol->set_buffers(bufferevent_get_input(m_bev), bufferevent_get_output(m_bev));
-    */
+    m_protocol->set_sockfd(sockfd);
 }
 
 int shard_connection::setup_socket(struct connect_info* addr) {
-    (void)addr;
-    /*
     int flags;
     int sockfd;
     if (m_unix_sockaddr != NULL) {
@@ -254,13 +246,9 @@ int shard_connection::setup_socket(struct connect_info* addr) {
     }
 
     return sockfd;
-    */
-    return -1;
 }
 
 int shard_connection::connect(struct connect_info* addr) {
-    (void)addr;
-    /*
     // set required setup commands
     m_authentication = m_config->authenticate ? auth_none : auth_done;
     m_db_selection = m_config->select_db ? select_none : select_done;
@@ -289,7 +277,6 @@ int shard_connection::connect(struct connect_info* addr) {
         benchmark_error_log("connect failed, error = %s\n", strerror(errno));
         return -1;
     }
-    */
     return 0;
 }
 
@@ -464,7 +451,7 @@ void shard_connection::process_response(void)
         m_conns_manager->set_end_time();
         bufferevent_disable(m_bev, EV_WRITE|EV_READ);
     } else {
-        fill_pipeline();
+        //fill_pipeline();
     }
 }
 
@@ -505,15 +492,17 @@ void shard_connection::handle_event(short events)
     // sockets we workaround since connect() returned immediately, but we don't want
     // to do any I/O from the client::connect() call...
 
-    if ((get_connection_state() == conn_in_progress) && (events & BEV_EVENT_CONNECTED)) {
+    if ((get_connection_state() == conn_in_progress) || (get_connection_state() == conn_connected)) {
         m_connection_state = conn_connected;
         bufferevent_enable(m_bev, EV_READ|EV_WRITE);
 
         if (!m_conns_manager->get_reqs_processed()) {
             process_first_request();
+            process_response();
         } else {
             benchmark_debug_log("reconnection complete, proceeding with test\n");
             fill_pipeline();
+            process_response();
         }
 
         return;
@@ -566,7 +555,6 @@ void shard_connection::send_set_command(struct timeval* sent_time, const char *k
                                              expiry, offset);
 
     push_req(new request(rt_set, cmd_size, sent_time, 1));
-    process_response();
 }
 
 void shard_connection::send_get_command(struct timeval* sent_time,
@@ -577,7 +565,6 @@ void shard_connection::send_get_command(struct timeval* sent_time,
     cmd_size = m_protocol->write_command_get(key, key_len, offset);
 
     push_req(new request(rt_get, cmd_size, sent_time, 1));
-    process_response();
 }
 
 void shard_connection::send_mget_command(struct timeval* sent_time, const keylist* key_list) {

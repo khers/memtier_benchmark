@@ -51,6 +51,8 @@
 #include "client.h"
 #include "cluster_client.h"
 
+#include <iostream>
+
 
 bool client::setup_client(benchmark_config *config, abstract_protocol *protocol, object_generator *objgen)
 {
@@ -277,6 +279,7 @@ void client::create_arbitrary_request(const arbitrary_command* cmd, struct timev
 void client::create_request(struct timeval timestamp, unsigned int conn_id)
 {
     // are we using arbitrary command?
+    /*
     if (m_config->arbitrary_commands->is_defined()) {
         const arbitrary_command* executed_command = m_config->arbitrary_commands->get_next_executed_command(m_arbitrary_command_ratio_count,
                                                                                                       m_executed_command_index);
@@ -284,6 +287,7 @@ void client::create_request(struct timeval timestamp, unsigned int conn_id)
 
         return;
     }
+    */
 
     // If the Set:Wait ratio is not 0, start off with WAITs
     if (m_config->wait_ratio.b &&

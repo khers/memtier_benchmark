@@ -175,6 +175,7 @@ protected:
 
     bool m_keep_value;
     struct protocol_response m_last_response;
+    int sockfd;
 public:
     abstract_protocol();
     virtual ~abstract_protocol();
@@ -197,6 +198,7 @@ public:
     virtual int write_arbitrary_command(const char *val, int val_len) = 0;
 
     struct protocol_response* get_response(void) { return &m_last_response; }
+    void set_sockfd(int fd) {sockfd = fd;}
 };
 
 class abstract_protocol *protocol_factory(const char *proto_name);

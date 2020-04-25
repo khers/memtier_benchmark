@@ -23,6 +23,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <unistd.h>
 #ifdef HAVE_ASSERT_H
 #include <assert.h>
 #endif
@@ -34,6 +35,8 @@ extern "C" {
 #include "protocol.h"
 #include "memtier_benchmark.h"
 #include "libmemcached_protocol/binary.h"
+
+#include <iostream>
 
 /////////////////////////////////////////////////////////////////////////
 
@@ -1239,7 +1242,11 @@ int kernkv_protocol::write_command_set(const char *key, int key_len, const char 
         benchmark_error_log("KernKV put call failed\n");
     }
 
-    return static_cast<int>((2 * sizeof(u64)) + val.len);
+    std::cout << "Set key " << kern_key << std::endl;
+
+    //write(sockfd, &val, sizeof(u64) + val.len);
+
+    return 0;
 }
 
 int kernkv_protocol::write_command_get(const char *key, int key_len, unsigned int offset) {
@@ -1255,6 +1262,8 @@ int kernkv_protocol::write_command_get(const char *key, int key_len, unsigned in
 
     memset(&val, 0, sizeof(struct value));
 
+    std::cout <<"Getting key " << kern_key << std::endl;
+
     int ret = kernkv_get(kern_key, &val);
     ++m_response_len;
     if (ret == KV_VALUE || ret == KV_SUCCESS) {
@@ -1263,11 +1272,12 @@ int kernkv_protocol::write_command_get(const char *key, int key_len, unsigned in
     } else if (ret == KV_NOTFOUND) {
         m_last_response.set_error(false);
     } else {
-        benchmark_error_log("KernKV GET failed\n");
+        benchmark_error_log("KernKV GET failed %d\n", ret);
         m_last_response.set_error(true);
     }
 
-    return sizeof(u64);
+    //write(sockfd, &val, sizeof(u64) + val.len);
+    return 0;
 }
 
 

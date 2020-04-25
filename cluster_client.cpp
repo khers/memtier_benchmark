@@ -44,6 +44,8 @@
 #include <assert.h>
 #endif
 
+#include <iostream>
+
 #include "cluster_client.h"
 #include "memtier_benchmark.h"
 #include "obj_gen.h"
@@ -110,6 +112,7 @@ static uint32_t calc_hslot_crc16_cluster(const char *str, size_t length)
 
 cluster_client::cluster_client(client_group* group) : client(group)
 {
+    std::cout << "Built cluster client from group" << std::endl;
 }
 
 cluster_client::~cluster_client() {
